@@ -41,7 +41,7 @@ This crate allows you to write the following instead:
 use crossroads::crossroads;
 use std::collections::HashMap;
 
-#[crosspoints]
+#[crossroads]
 #[test]
 fn empty() {
     let map = Map::new();
