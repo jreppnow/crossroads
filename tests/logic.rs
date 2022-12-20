@@ -36,16 +36,22 @@ fn with_value() {
     assert_eq!(2, returns_a_2());
 }
 
-// TODO: Up next!
-// #[crossroads]
-// fn recursively() -> usize {
-//     match fork!() {
-//         returns => {
-//             match fork!() {
-//                 a_1 => 1,
-//                 a_3 => 3,
-//             }
-//         }
-//         returns_a_2 => 2,
-//     }
-// }
+#[crossroads]
+fn recursively() -> usize {
+    match fork!() {
+        returns => {
+            match fork!() {
+                a_1 => 1,
+                a_3 => 3,
+            }
+        }
+        returns_a_2 => 2,
+    }
+}
+
+#[test]
+fn recursive() {
+    assert_eq!(1, recursively_returns_a_1());
+    assert_eq!(2, recursively_returns_a_2());
+    assert_eq!(3, recursively_returns_a_3());
+}

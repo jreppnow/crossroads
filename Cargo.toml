@@ -4,7 +4,6 @@ version = "0.0.1"
 edition = "2021"
 authors = ["Janosch Reppnow <janoschre+rust@gmail.com>"]
 license = "MPL-2.0"
-license-file = "LICENSE"
 description = "A proc-macro that turns one function into many along a user-defined set of fork points!"
 keywords = ["test", "section", "structure", "macro", "nested"]
 
@@ -21,7 +20,7 @@ name = "logic"
 path = "tests/logic.rs"
 
 [dependencies]
-syn = { version = "1.0", features = ["full", "extra-traits"] }
+syn = { version = "1.0", features = ["full", "extra-traits", "visit", "visit-mut"] }
 
 [dev-dependencies]
 trybuild = "1.0"

@@ -7,57 +7,161 @@
  */
 
 use proc_macro::TokenStream;
+use std::borrow::Borrow;
 use std::collections::VecDeque;
 
-use syn::{Arm, Block, Expr, ExprBlock, Ident, ItemFn, Pat, PathSegment, Stmt};
+use syn::{Arm, Expr, ExprArray, ExprAssign, ExprAssignOp, ExprAsync, ExprAwait, ExprBinary, ExprBlock, ExprBox, ExprBreak, ExprCall, ExprMatch, Ident, ItemFn, Local, Pat, PathSegment, Stmt, visit, visit_mut};
 use syn::__private::{TokenStream2, ToTokens};
+use syn::Expr::Block;
+use syn::spanned::Spanned;
+use syn::visit::Visit;
+use syn::visit_mut::VisitMut;
 
-struct Tree<T> {
-    item: T,
-    children: Vec<Tree<T>>,
+#[derive(Debug, Clone)]
+struct Paths<T>(Vec<Vec<T>>);
+
+impl<T> Paths<T> {
+    fn new(t: T) -> Self {
+        Self(vec!(vec!(t)))
+    }
+
+    fn extend_with(&mut self, new_children: &[T]) where T: Clone {
+        let mut all_paths = vec!();
+
+        for child in new_children {
+            for path in &self.0 {
+                let mut path = path.clone();
+                path.push(child.clone());
+                all_paths.push(path);
+            }
+        }
+
+        std::mem::swap(&mut self.0, &mut all_paths);
+    }
 }
 
-impl<T> Tree<T> {
-    fn root(item: T) -> Self {
+struct PathFinder {
+    paths: Paths<String>,
+}
+
+impl PathFinder {
+    fn new(paths: Paths<String>) -> Self {
         Self {
-            item,
-            children: Vec::new(),
+            paths
         }
     }
 
-    fn add_child(&mut self, item: T) {
-        self.children.push(Self::root(item))
+    fn into_inner(self) -> Paths<String> {
+        self.paths
     }
+}
 
-    fn leaf(&self) -> bool {
-        self.children.is_empty()
-    }
+impl<'ast> Visit<'ast> for PathFinder {
+    fn visit_expr(&mut self, expr: &'ast Expr) {
+        if match expr {
+            Expr::Match(mtch) => {
+                match mtch.expr.as_ref() {
+                    Expr::Macro(mac) => {
+                        match mac.mac.path.segments.first() {
+                            Some(segment) if segment.ident.to_string() == "fork" => {
+                                dbg!(mac);
+                                let mut new_paths = Paths { 0: vec![] };
+                                assert!(!mtch.arms.is_empty(), "Must have at least one branch in match branches with fork!()! {:?}", mtch.span());
+                                for arm in &mtch.arms {
+                                    if let Pat::Ident(ident) = &arm.pat {
+                                        let mut this_paths = self.paths.clone();
+                                        for path in &mut this_paths.0 {
+                                            path.push(ident.ident.to_string());
+                                        }
 
+                                        dbg!(&this_paths);
 
-    fn paths(&self) -> VecDeque<VecDeque<T>> where T: Clone {
-        if self.leaf() {
-            VecDeque::from(vec!(VecDeque::from(vec!(self.item.clone()))))
-        } else {
-            let mut paths = vec![];
+                                        let mut this_pathfinder = PathFinder::new(this_paths);
+                                        this_pathfinder.visit_expr(arm.body.as_ref());
 
-            for child in &self.children {
-                for mut path in child.paths() {
-                    path.push_front(self.item.clone());
-                    paths.push(path);
+                                        new_paths.0.append(&mut this_pathfinder.into_inner().0);
+                                    } else {
+                                        panic!("Must use only idents with a fork!() match! {:?}", arm.span());
+                                    }
+                                }
+
+                                self.paths = new_paths;
+                                false
+                            }
+                            _ => true,
+                        }
+                        // TODO: Proper handling of namespace..
+                        // match mac.mac.path.segments.iter().map(|segment| segment.ident.to_string()).collect::<Vec<String>>().as_ref::<[&str]>() {
+                        //     ["fork"] | ["crossroads", "fork"] => {}
+                        //     _ => {}
+                        // }
+                    }
+                    _ => true,
                 }
             }
-
-            VecDeque::from(paths)
+            _ => true,
+        } {
+            visit::visit_expr(self, expr);
         }
     }
 }
 
-
-struct Leafs<'tree, Item> {
-    tree: &'tree Tree<Item>,
-    current_child_iter: Option<Box<Leafs<'tree, Item>>>,
+struct Rewriter {
+    along_path: VecDeque<String>,
 }
 
+impl Rewriter {
+    fn new(path: impl Into<VecDeque<String>>) -> Self {
+        Self {
+            along_path: path.into(),
+        }
+    }
+}
+
+impl VisitMut for Rewriter {
+    fn visit_expr_mut(&mut self, expr: &mut Expr) {
+        if let Some(mut replacement) = if let Expr::Match(mtch) = &expr {
+            match mtch.expr.as_ref() {
+                Expr::Macro(mac) => {
+                    match mac.mac.path.segments.first() {
+                        Some(segment) if segment.ident.to_string() == "fork" => {
+                            let current = self.along_path.pop_front().expect("There should always be enough identifiers in this list.");
+                            assert!(!mtch.arms.is_empty(), "Must have at least one branch in match branches with fork!()! {:?}", mtch.span());
+
+                            let mut ret = None;
+
+                            for arm in &mtch.arms {
+                                if let Pat::Ident(ident) = &arm.pat {
+                                    if ident.ident.to_string() == current {
+                                        ret = Some(Expr::clone(arm.body.as_ref()));
+                                    }
+                                } else {
+                                    panic!("Must use only idents with a fork!() match! {:?}", arm.span());
+                                }
+                            }
+
+                            if let Some(ret) = ret {
+                                Some(ret)
+                            } else {
+                                panic!("Did not find identifier {} in corresponding match statement. This is almost certainly a bug, please feel free to report it. {:?}", current, mtch.span());
+                            }
+                        }
+                        _ => None
+                    }
+                    // TODO: Proper handling of namespace..
+                    // match mac.mac.path.segments.iter().map(|segment| segment.ident.to_string()).collect::<Vec<String>>().as_ref::<[&str]>() {
+                    //     ["fork"] | ["crossroads", "fork"] => {}
+                    //     _ => {}
+                    // }
+                }
+                _ => None
+            }
+        } else { None } {
+            std::mem::swap(expr, &mut replacement);
+        }
+        visit_mut::visit_expr_mut(self, expr);
+    }
+}
 
 #[proc_macro_attribute]
 pub fn crossroads(args: TokenStream, input: TokenStream) -> TokenStream {
@@ -65,87 +169,15 @@ pub fn crossroads(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let name = function.sig.ident.to_string().clone();
 
-    let mut forks = Tree::root(name);
+    let mut paths = PathFinder::new(Paths::new(name));
+    paths.visit_block(&function.block);
 
-    for stmt in &function.block.stmts {
-        match stmt {
-            Stmt::Local(_) => todo!(),
-            Stmt::Expr(expr) | Stmt::Semi(expr, _) => {
-                match expr {
-                    // Expr::Array(_) => {}
-                    // Expr::Assign(_) => {}
-                    // Expr::AssignOp(_) => {}
-                    // Expr::Async(_) => {}
-                    // Expr::Await(_) => {}
-                    // Expr::Binary(_) => {}
-                    // Expr::Block(_) => {}
-                    // Expr::Box(_) => {}
-                    // Expr::Break(_) => {}
-                    // Expr::Call(_) => {}
-                    // Expr::Cast(_) => {}
-                    // Expr::Closure(_) => {}
-                    // Expr::Continue(_) => {}
-                    // Expr::Field(_) => {}
-                    // Expr::ForLoop(_) => {}
-                    // Expr::Group(_) => {}
-                    // Expr::If(_) => {}
-                    // Expr::Index(_) => {}
-                    // Expr::Let(_) => {}
-                    // Expr::Lit(_) => {}
-                    // Expr::Loop(_) => {}
-                    // Expr::Macro(_) => {}
-                    Expr::Match(mtch) => {
-                        match mtch.expr.as_ref() {
-                            Expr::Macro(mac) => {
-                                match mac.mac.path.segments.first() {
-                                    Some(segment) if segment.ident.to_string() == "fork" => {
-                                        for arm in &mtch.arms {
-                                            if let Pat::Ident(ident) = &arm.pat {
-                                                // TODO: Check if valid?
-                                                forks.add_child(ident.ident.to_string());
-                                                // TODO: Recursion!
-                                            }
-                                        }
-                                    }
-                                    _ => {}
-                                }
-                                // TODO: Proper handling of namespace..
-                                // match mac.mac.path.segments.iter().map(|segment| segment.ident.to_string()).collect::<Vec<String>>().as_ref::<[&str]>() {
-                                //     ["fork"] | ["crossroads", "fork"] => {}
-                                //     _ => {}
-                                // }
-                            }
-                            _ => {}
-                        }
-                    }
-                    // Expr::MethodCall(_) => {}
-                    // Expr::Paren(_) => {}
-                    // Expr::Path(_) => {}
-                    // Expr::Range(_) => {}
-                    // Expr::Reference(_) => {}
-                    // Expr::Repeat(_) => {}
-                    // Expr::Return(_) => {}
-                    // Expr::Struct(_) => {}
-                    // Expr::Try(_) => {}
-                    // Expr::TryBlock(_) => {}
-                    // Expr::Tuple(_) => {}
-                    // Expr::Type(_) => {}
-                    // Expr::Unary(_) => {}
-                    // Expr::Unsafe(_) => {}
-                    // Expr::Verbatim(_) => {}
-                    // Expr::While(_) => {}
-                    // Expr::Yield(_) => {}
-                    // Expr::__NonExhaustive => {}
-                    _ => {}
-                }
-            }
-            _ => {}
-        }
-    }
+    let paths = dbg!(paths.into_inner());
 
-    let mut new_functions: Vec<ItemFn> = vec!();
+    let mut new_functions: Vec<ItemFn> = Vec::with_capacity(paths.0.len());
 
-    for mut path in forks.paths() {
+    for mut path in paths.0 {
+        let mut path = VecDeque::from(path);
         path.pop_front();
         let mut function = function.clone();
 
@@ -157,91 +189,8 @@ pub fn crossroads(args: TokenStream, input: TokenStream) -> TokenStream {
 
         function.sig.ident = Ident::new(&new_name, function.sig.ident.span());
 
-        for stmt in &mut function.block.stmts {
-            match stmt {
-                Stmt::Local(_) => todo!(),
-                Stmt::Expr(expr) | Stmt::Semi(expr, _) => {
-                    if let Some(mut replacement) = match expr {
-                        // Expr::Array(_) => {}
-                        // Expr::Assign(_) => {}
-                        // Expr::AssignOp(_) => {}
-                        // Expr::Async(_) => {}
-                        // Expr::Await(_) => {}
-                        // Expr::Binary(_) => {}
-                        // Expr::Block(_) => {}
-                        // Expr::Box(_) => {}
-                        // Expr::Break(_) => {}
-                        // Expr::Call(_) => {}
-                        // Expr::Cast(_) => {}
-                        // Expr::Closure(_) => {}
-                        // Expr::Continue(_) => {}
-                        // Expr::Field(_) => {}
-                        // Expr::ForLoop(_) => {}
-                        // Expr::Group(_) => {}
-                        // Expr::If(_) => {}
-                        // Expr::Index(_) => {}
-                        // Expr::Let(_) => {}
-                        // Expr::Lit(_) => {}
-                        // Expr::Loop(_) => {}
-                        // Expr::Macro(_) => {}
-                        Expr::Match(mtch) => {
-                            match mtch.expr.as_ref() {
-                                Expr::Macro(mac) => {
-                                    match mac.mac.path.segments.first() {
-                                        Some(segment) if segment.ident.to_string() == "fork" => {
-                                            let mut val = None;
-                                            for arm in &mtch.arms {
-                                                if let Pat::Ident(ident) = &arm.pat {
-                                                    if ident.ident.to_string() == *path.front().unwrap() {
-                                                        val = Some(Expr::Block(ExprBlock {
-                                                            attrs: vec![], // TODO
-                                                            label: None, // TODO
-                                                            block: Block { brace_token: Default::default(), stmts: vec![Stmt::Expr((*arm.body).clone())] },
-                                                        }));
-                                                        break;
-                                                    }
-                                                }
-                                            }
-                                            val
-                                        }
-                                        _ => None
-                                    }
-                                    // TODO: Proper handling of namespace..
-                                    // match mac.mac.path.segments.iter().map(|segment| segment.ident.to_string()).collect::<Vec<String>>().as_ref::<[&str]>() {
-                                    //     ["fork"] | ["crossroads", "fork"] => {}
-                                    //     _ => {}
-                                    // }
-                                }
-                                _ => None
-                            }
-                        }
-                        // Expr::MethodCall(_) => {}
-                        // Expr::Paren(_) => {}
-                        // Expr::Path(_) => {}
-                        // Expr::Range(_) => {}
-                        // Expr::Reference(_) => {}
-                        // Expr::Repeat(_) => {}
-                        // Expr::Return(_) => {}
-                        // Expr::Struct(_) => {}
-                        // Expr::Try(_) => {}
-                        // Expr::TryBlock(_) => {}
-                        // Expr::Tuple(_) => {}
-                        // Expr::Type(_) => {}
-                        // Expr::Unary(_) => {}
-                        // Expr::Unsafe(_) => {}
-                        // Expr::Verbatim(_) => {}
-                        // Expr::While(_) => {}
-                        // Expr::Yield(_) => {}
-                        // Expr::__NonExhaustive => {}
-                        _ => None
-                    } {
-                        std::mem::swap(&mut replacement, expr);
-                    }
-                }
-                _ => {}
-            }
-            {}
-        }
+        let mut rewriter = Rewriter::new(path);
+        rewriter.visit_block_mut(&mut function.block);
         new_functions.push(function);
     }
 
