@@ -39,7 +39,6 @@ impl<'ast> Visit<'ast> for PathFinder {
                     Expr::Macro(mac) => {
                         match mac.mac.path.segments.first() {
                             Some(segment) if segment.ident == "fork" => {
-                                dbg!(mac);
                                 let mut new_paths = Paths::default();
                                 assert!(!mtch.arms.is_empty(), "Must have at least one branch in match branches with fork!()! {:?}", mtch.span());
                                 for arm in &mtch.arms {
@@ -48,8 +47,6 @@ impl<'ast> Visit<'ast> for PathFinder {
                                         for path in &mut this_paths {
                                             path.push(ident.ident.to_string());
                                         }
-
-                                        dbg!(&this_paths);
 
                                         let mut this_pathfinder = PathFinder::new(this_paths);
                                         this_pathfinder.visit_expr(arm.body.as_ref());
@@ -115,6 +112,7 @@ impl VisitMut for Rewriter {
                                 if let Pat::Ident(ident) = &arm.pat {
                                     if ident.ident == current {
                                         ret = Some(Expr::clone(arm.body.as_ref()));
+                                        break;
                                     }
                                 } else {
                                     panic!(
@@ -144,8 +142,13 @@ impl VisitMut for Rewriter {
             None
         } {
             std::mem::swap(expr, &mut replacement);
+            // This is kind of mean: If the expression that we are putting in place of the match is itself another match,
+            // it gets skipped here (as the recursive method assumes you have already visited the node that you give).
+            // As such, we need to manually recurse in this specific case.
+            self.visit_expr_mut(expr);
+        } else {
+            visit_mut::visit_expr_mut(self, expr);
         }
-        visit_mut::visit_expr_mut(self, expr);
     }
 }
 
@@ -158,7 +161,7 @@ pub fn crossroads(_: TokenStream, input: TokenStream) -> TokenStream {
     let mut paths = PathFinder::new(vec![vec![name]]);
     paths.visit_block(&function.block);
 
-    let paths = dbg!(paths.into_inner());
+    let paths = paths.into_inner();
 
     let mut new_functions: Vec<ItemFn> = Vec::with_capacity(paths.len());
 
