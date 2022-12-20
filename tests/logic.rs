@@ -39,12 +39,10 @@ fn with_value() {
 #[crossroads]
 fn recursively() -> usize {
     match fork!() {
-        returns => {
-            match fork!() {
-                a_1 => 1,
-                a_3 => 3,
-            }
-        }
+        returns => match fork!() {
+            a_1 => 1,
+            a_3 => 3,
+        },
         returns_a_2 => 2,
     }
 }

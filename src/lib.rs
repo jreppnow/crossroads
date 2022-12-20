@@ -9,11 +9,11 @@
 use proc_macro::TokenStream;
 use std::collections::VecDeque;
 
-use syn::{Expr, Ident, ItemFn, Pat, visit, visit_mut};
-use syn::__private::{TokenStream2, ToTokens};
+use syn::__private::{ToTokens, TokenStream2};
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::visit_mut::VisitMut;
+use syn::{visit, visit_mut, Expr, Ident, ItemFn, Pat};
 
 type Paths<T> = Vec<Vec<T>>;
 
@@ -23,9 +23,7 @@ struct PathFinder {
 
 impl PathFinder {
     fn new(paths: Paths<String>) -> Self {
-        Self {
-            paths
-        }
+        Self { paths }
     }
 
     fn into_inner(self) -> Paths<String> {
@@ -58,7 +56,10 @@ impl<'ast> Visit<'ast> for PathFinder {
 
                                         new_paths.append(&mut this_pathfinder.into_inner());
                                     } else {
-                                        panic!("Must use only idents with a fork!() match! {:?}", arm.span());
+                                        panic!(
+                                            "Must use only idents with a fork!() match! {:?}",
+                                            arm.span()
+                                        );
                                     }
                                 }
 
@@ -102,7 +103,10 @@ impl VisitMut for Rewriter {
                 Expr::Macro(mac) => {
                     match mac.mac.path.segments.first() {
                         Some(segment) if segment.ident == "fork" => {
-                            let current = self.along_path.pop_front().expect("There should always be enough identifiers in this list.");
+                            let current = self
+                                .along_path
+                                .pop_front()
+                                .expect("There should always be enough identifiers in this list.");
                             assert!(!mtch.arms.is_empty(), "Must have at least one branch in match branches with fork!()! {:?}", mtch.span());
 
                             let mut ret = None;
@@ -113,7 +117,10 @@ impl VisitMut for Rewriter {
                                         ret = Some(Expr::clone(arm.body.as_ref()));
                                     }
                                 } else {
-                                    panic!("Must use only idents with a fork!() match! {:?}", arm.span());
+                                    panic!(
+                                        "Must use only idents with a fork!() match! {:?}",
+                                        arm.span()
+                                    );
                                 }
                             }
 
@@ -123,7 +130,7 @@ impl VisitMut for Rewriter {
                                 panic!("Did not find identifier {} in corresponding match statement. This is almost certainly a bug, please feel free to report it. {:?}", current, mtch.span());
                             }
                         }
-                        _ => None
+                        _ => None,
                     }
                     // TODO: Proper handling of namespace..
                     // match mac.mac.path.segments.iter().map(|segment| segment.ident.to_string()).collect::<Vec<String>>().as_ref::<[&str]>() {
@@ -131,9 +138,11 @@ impl VisitMut for Rewriter {
                     //     _ => {}
                     // }
                 }
-                _ => None
+                _ => None,
             }
-        } else { None } {
+        } else {
+            None
+        } {
             std::mem::swap(expr, &mut replacement);
         }
         visit_mut::visit_expr_mut(self, expr);
