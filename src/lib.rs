@@ -188,5 +188,4 @@ pub fn crossroads(_: TokenStream, input: TokenStream) -> TokenStream {
         function.to_tokens(&mut tokens);
     }
     tokens.into()
-    // new_functions.drain().map(|function| function.into_token_stream()).
 }
