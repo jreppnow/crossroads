@@ -10,5 +10,13 @@ keywords = ["test", "section", "structure", "macro", "nested"]
 [lib]
 proc-macro = true
 
+
+[[test]]
+name = "good_cases"
+path = "tests/good.rs"
+
 [dependencies]
-syn = "1.0"
+syn = { version = "1.0", features = ["full", "extra-traits"] }
+
+[dev-dependencies]
+trybuild = "1.0"
