@@ -7,38 +7,15 @@
  */
 
 use proc_macro::TokenStream;
-use std::borrow::Borrow;
 use std::collections::VecDeque;
 
-use syn::{Arm, Expr, ExprArray, ExprAssign, ExprAssignOp, ExprAsync, ExprAwait, ExprBinary, ExprBlock, ExprBox, ExprBreak, ExprCall, ExprMatch, Ident, ItemFn, Local, Pat, PathSegment, Stmt, visit, visit_mut};
+use syn::{Expr, Ident, ItemFn, Pat, visit, visit_mut};
 use syn::__private::{TokenStream2, ToTokens};
-use syn::Expr::Block;
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::visit_mut::VisitMut;
 
-#[derive(Debug, Clone)]
-struct Paths<T>(Vec<Vec<T>>);
-
-impl<T> Paths<T> {
-    fn new(t: T) -> Self {
-        Self(vec!(vec!(t)))
-    }
-
-    fn extend_with(&mut self, new_children: &[T]) where T: Clone {
-        let mut all_paths = vec!();
-
-        for child in new_children {
-            for path in &self.0 {
-                let mut path = path.clone();
-                path.push(child.clone());
-                all_paths.push(path);
-            }
-        }
-
-        std::mem::swap(&mut self.0, &mut all_paths);
-    }
-}
+type Paths<T> = Vec<Vec<T>>;
 
 struct PathFinder {
     paths: Paths<String>,
@@ -63,14 +40,14 @@ impl<'ast> Visit<'ast> for PathFinder {
                 match mtch.expr.as_ref() {
                     Expr::Macro(mac) => {
                         match mac.mac.path.segments.first() {
-                            Some(segment) if segment.ident.to_string() == "fork" => {
+                            Some(segment) if segment.ident == "fork" => {
                                 dbg!(mac);
-                                let mut new_paths = Paths { 0: vec![] };
+                                let mut new_paths = Paths::default();
                                 assert!(!mtch.arms.is_empty(), "Must have at least one branch in match branches with fork!()! {:?}", mtch.span());
                                 for arm in &mtch.arms {
                                     if let Pat::Ident(ident) = &arm.pat {
                                         let mut this_paths = self.paths.clone();
-                                        for path in &mut this_paths.0 {
+                                        for path in &mut this_paths {
                                             path.push(ident.ident.to_string());
                                         }
 
@@ -79,7 +56,7 @@ impl<'ast> Visit<'ast> for PathFinder {
                                         let mut this_pathfinder = PathFinder::new(this_paths);
                                         this_pathfinder.visit_expr(arm.body.as_ref());
 
-                                        new_paths.0.append(&mut this_pathfinder.into_inner().0);
+                                        new_paths.append(&mut this_pathfinder.into_inner());
                                     } else {
                                         panic!("Must use only idents with a fork!() match! {:?}", arm.span());
                                     }
@@ -124,7 +101,7 @@ impl VisitMut for Rewriter {
             match mtch.expr.as_ref() {
                 Expr::Macro(mac) => {
                     match mac.mac.path.segments.first() {
-                        Some(segment) if segment.ident.to_string() == "fork" => {
+                        Some(segment) if segment.ident == "fork" => {
                             let current = self.along_path.pop_front().expect("There should always be enough identifiers in this list.");
                             assert!(!mtch.arms.is_empty(), "Must have at least one branch in match branches with fork!()! {:?}", mtch.span());
 
@@ -132,7 +109,7 @@ impl VisitMut for Rewriter {
 
                             for arm in &mtch.arms {
                                 if let Pat::Ident(ident) = &arm.pat {
-                                    if ident.ident.to_string() == current {
+                                    if ident.ident == current {
                                         ret = Some(Expr::clone(arm.body.as_ref()));
                                     }
                                 } else {
@@ -164,27 +141,27 @@ impl VisitMut for Rewriter {
 }
 
 #[proc_macro_attribute]
-pub fn crossroads(args: TokenStream, input: TokenStream) -> TokenStream {
+pub fn crossroads(_: TokenStream, input: TokenStream) -> TokenStream {
     let function = syn::parse_macro_input!(input as ItemFn);
 
-    let name = function.sig.ident.to_string().clone();
+    let name = function.sig.ident.to_string();
 
-    let mut paths = PathFinder::new(Paths::new(name));
+    let mut paths = PathFinder::new(vec![vec![name]]);
     paths.visit_block(&function.block);
 
     let paths = dbg!(paths.into_inner());
 
-    let mut new_functions: Vec<ItemFn> = Vec::with_capacity(paths.0.len());
+    let mut new_functions: Vec<ItemFn> = Vec::with_capacity(paths.len());
 
-    for mut path in paths.0 {
+    for path in paths {
         let mut path = VecDeque::from(path);
         path.pop_front();
         let mut function = function.clone();
 
         let mut new_name = function.sig.ident.to_string();
         for fork in &path {
-            new_name.push_str("_"); // TODO: Replacement character and corresponding rules!
-            new_name.push_str(&fork)
+            new_name.push('_'); // TODO: Replacement character and corresponding rules!
+            new_name.push_str(fork)
         }
 
         function.sig.ident = Ident::new(&new_name, function.sig.ident.span());
