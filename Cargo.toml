@@ -1,0 +1,14 @@
+[package]
+name = "crossroads"
+version = "0.0.1"
+edition = "2021"
+authors = ["Janosch Reppnow <janoschre+rust@gmail.com>"]
+license = "MIT OR Apache-2.0"
+description = "A proc-macro that turns one function into many along a user-defined set of fork points!"
+keywords = ["test", "section", "structure", "macro", "nested"]
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = "1.0"
