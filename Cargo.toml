@@ -19,6 +19,12 @@ path = "tests/compile/good.rs"
 name = "logic"
 path = "tests/logic.rs"
 
+[[example]]
+name = "testing_map"
+path = "examples/map.rs"
+crate-type = ["lib"]
+test = true
+
 [dependencies]
 syn = { version = "1.0", features = ["full", "extra-traits", "visit", "visit-mut"] }
 

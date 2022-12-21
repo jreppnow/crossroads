@@ -9,14 +9,14 @@ use std::collections::HashMap;
 
 #[test]
 fn empty() {
-    let map = Map::new();
+    let mut map = Map::new();
 
     assert!(map.empty());
 }
 
 #[test]
 fn empty_after_add_remove() {
-    let map = HashMap::new();
+    let mut map = HashMap::new();
 
     map.insert("hello", 1);
     map.remove("hello");
@@ -26,7 +26,7 @@ fn empty_after_add_remove() {
 
 #[test]
 fn empty_after_clear() {
-    let map = HashMap::new();
+    let mut map = HashMap::new();
 
     map.insert("hello", 1);
     map.clear();
@@ -38,37 +38,38 @@ fn empty_after_clear() {
 This crate allows you to write the following instead:
 
 ```rust
-use crossroads::crossroads;
-use std::collections::HashMap;
-
-#[crossroads]
+#[crossroads::crossroads]
 #[test]
 fn empty() {
-    let map = Map::new();
+    use std::collections::HashMap;
+
+    let mut map = HashMap::<String, usize>::default();
 
     match fork!() {
         by_default => {}
         after_add => {
-            map.insert("hello", 1);
-            match fork!()
-            {
-                after_remove => {
-                    map.remove("hello");
-                }
-                after_clear => {
-                    map.clear();
-                }
-            }
+            map.insert("Key".to_owned(), 1337);
+            match fork!() {
+                and_remove => map.remove("Key"),
+                and_clear => map.clear(),
+            };
         }
-    };
+    }
 
-    assert!(map.empty());
+    assert!(map.is_empty());
 }
 ```
 
 The macro computes every possible path through the ```fork!()```s and creates a version of the function for it.
 These can then be picked up by the test system (as attributes below the ```#[crossroads]``` attribute are cloned as
-well).
+well). In this case, you will get output like this (run ```cargo test --examples``` to reproduce: 
+
+```
+running 3 tests
+test empty_by_default ... ok
+test empty_after_add_and_clear ... ok
+test empty_after_add_and_remove ... ok
+```
 
 The idea is inspired
 by [```@Nested``` tests in JUnit 5](https://junit.org/junit5/docs/5.4.1/api/org/junit/jupiter/api/Nested.html)

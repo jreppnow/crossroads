@@ -8,47 +8,47 @@
 
 use crossroads::crossroads;
 
-#[crossroads]
-fn i() {
-    match fork!() {
-        am_legend => {}
-        am_human => {}
-    }
-}
-
 #[test]
 fn actually_duplicates() {
+    #[crossroads]
+    fn i() {
+        match fork!() {
+            am_legend => {}
+            am_human => {}
+        }
+    }
+
     i_am_legend();
     i_am_human();
 }
 
-#[crossroads]
-fn returns() -> usize {
-    match fork!() {
-        a_1 => 1,
-        a_2 => 2,
-    }
-}
-
 #[test]
 fn with_value() {
+    #[crossroads]
+    fn returns() -> usize {
+        match fork!() {
+            a_1 => 1,
+            a_2 => 2,
+        }
+    }
+
     assert_eq!(1, returns_a_1());
     assert_eq!(2, returns_a_2());
 }
 
-#[crossroads]
-fn recursively() -> usize {
-    match fork!() {
-        returns => match fork!() {
-            a_1 => 1,
-            a_3 => 3,
-        },
-        returns_a_2 => 2,
-    }
-}
-
 #[test]
 fn recursive() {
+    #[crossroads]
+    fn recursively() -> usize {
+        match fork!() {
+            returns => match fork!() {
+                a_1 => 1,
+                a_3 => 3,
+            },
+            returns_a_2 => 2,
+        }
+    }
+
     assert_eq!(1, recursively_returns_a_1());
     assert_eq!(2, recursively_returns_a_2());
     assert_eq!(3, recursively_returns_a_3());
