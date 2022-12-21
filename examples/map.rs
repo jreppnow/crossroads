@@ -3,6 +3,10 @@
 fn empty() {
     use std::collections::HashMap;
 
+    // Note: There is a version of this function, empty_by_default, which does not
+    // mutably access this value.. Unfortunately, there is not easy way to prevent warnings
+    // like these.
+    #[allow(unused_mut)]
     let mut map = HashMap::<String, usize>::default();
 
     match fork!() {
