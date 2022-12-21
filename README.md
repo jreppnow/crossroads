@@ -77,6 +77,15 @@ by [```@Nested``` tests in JUnit 5](https://junit.org/junit5/docs/5.4.1/api/org/
 and [subtests in doctest](https://github.com/doctest/doctest/blob/master/doc/markdown/tutorial.md#test-cases-and-subcases)
 .
 
+## Questions
+
+Answers to common questions:
+
+> 1. Why did you decide to use the standard ```match``` syntax instead of introducing a custom one, for example ```fork! { a => { .. }, b => { .. }}```?
+
+It would indeed be possible to offer a completely custom syntax with the proc macro. However, I decided to just latch 
+onto the ```match``` structure as it makes code-formatting tools, in particular ```rustfmt``` work a lot more smoothly.
+
 ## Contributions
 
 For now, this library is still in development and there are no clear, small changesets available for people to get
