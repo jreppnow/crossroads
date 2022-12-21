@@ -20,6 +20,99 @@
  * SOFTWARE.
  */
 
+//! A proc macro that turns one function into many - along user-defined forks points.
+//!
+//! # Motivation and Usage
+//! This crate allows you to define multiple functions sharing significant part of their logic.
+//! To understand why this is useful, consider the following example for a set of unit tests
+//! (the ```#[test]``` attribute is only commented out to have these be picked up by doctest):
+//!
+//! ```rust
+//! use std::collections::HashMap;
+//!
+//! // #[test]
+//! fn empty_be_default() {
+//!     let map: HashMap<String, usize> = Default::default();
+//!     
+//!     assert!(map.is_empty());
+//! }
+//!
+//! // #[test]
+//! fn empty_after_clear() {
+//!     let mut map: HashMap<String, usize> = Default::default();
+//!
+//!     map.insert("test".to_string(), 1);
+//!     map.clear();
+//!
+//!     assert!(map.is_empty());
+//! }
+//!
+//! // #[test]
+//! fn empty_after_remove() {
+//!     let mut map: HashMap<String, usize> = Default::default();
+//!
+//!     map.insert("test".to_string(), 1);
+//!     map.remove("test");
+//!
+//!     assert!(map.is_empty());
+//! }
+//! ```
+//!
+//! With this crate, you can write the following instead:
+//!
+//! ```rust
+//! use std::collections::HashMap;
+//! use crossroads::crossroads;
+//!
+//! #[crossroads]
+//! // #[test]
+//! fn empty() {
+//!     let mut map: HashMap<String, usize> = Default::default();
+//!
+//!     match fork!() {
+//!         by_default => {}
+//!         after_add => {
+//!             map.insert("Key".to_owned(), 1337);
+//!             match fork!() {
+//!                 and_remove => map.remove("Key"),
+//!                 and_clear => map.clear(),
+//!             };
+//!         }
+//!     }
+//!
+//!     assert!(map.is_empty());
+//! }
+//! ```
+//!
+//! The ```#[crossroads]``` macro will replace the function with as many functions as there are distinct paths through your fork points.
+//! In this case, it will generate:
+//! ```rust
+//! // #[test]
+//! fn empty_by_default() { /* ... */ }
+//! // #[test]
+//! fn empty_after_add_and_remove() { /* ... */ }
+//! // #[test]
+//! fn empty_after_add_and_clear() { /* ... */ }
+//! ```
+//!
+//! The contents of the methods are the result of replacing the ```match``` expressions with a
+//! block containing the expression specified in the corresponding ```match``` arms.
+//!
+//! You can find the above example in the ```examples``` folder and confirm that it will indeed produce the following output when run as a test:
+//! ```text
+//! running 3 tests
+//! test empty_by_default ... ok
+//! test empty_after_add_and_clear ... ok
+//! test empty_after_add_and_remove ... ok
+//! ```
+//!
+//! # Questions and Answers
+//!
+//! 1. Why did you decide to use the ```match```-based syntax and not implement a new one?
+//! The main reason for using the ```match``` syntax in the way this crate does is to make it as
+//! compatible as possible with code formattting tools such as ```rustfmt```.
+//! See the ```select!``` macros used in the async context for an example of issues a new syntax can cause.
+
 use proc_macro::TokenStream;
 use std::collections::VecDeque;
 
@@ -175,6 +268,12 @@ impl VisitMut for Rewriter {
     }
 }
 
+/// An attribute macro that can be placed above ```FnItem```s, i.e. freestanding functions everywhere.
+/// It will replace the function with a set of functions induced by the different paths through the
+/// function along the ```match fork!() { a => { ... }, ... }``` points, where the name of the function is induced by the
+/// sequence of the ```identifier``` specified in the patterns of the ```match``` branches used with the for that specific function instance.
+///
+/// See the crate-level documentation for a concrete example.
 #[proc_macro_attribute]
 pub fn crossroads(_: TokenStream, input: TokenStream) -> TokenStream {
     let function = syn::parse_macro_input!(input as ItemFn);
@@ -195,7 +294,7 @@ pub fn crossroads(_: TokenStream, input: TokenStream) -> TokenStream {
 
         let mut new_name = function.sig.ident.to_string();
         for fork in &path {
-            new_name.push('_'); // TODO: Replacement character and corresponding rules!
+            new_name.push('_');
             new_name.push_str(fork)
         }
 
