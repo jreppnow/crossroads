@@ -88,9 +88,16 @@ onto the ```match``` structure as it makes code-formatting tools, in particular 
 
 ## Contributions
 
-For now, this library is still in development and there are no clear, small changesets available for people to get
-involved. I'll do my best to get it into a workable state and will then gladly accept contributions.
+I welcome any suggestions/feature requests/changes/bug fixes. Feel free to open a PR if you already have concrete changes at hand. 
+Alternatively, open an issue and we can discuss possible solutions/viability. 
+
+Please note that any contributions that you make to this project are assumed to be licensed under the same license(s) as the remainder of project. 
+Make sure that you are legally allowed to grant such licenses to your work.
+
+General requirements:
+- CI checks must all pass on your PR.
+- After review/approval, please rebase to the latest version of the ```master``` branch.
 
 ## License
 
-The library is licensed under MPL-2.0 (for now, might go less restrictive in the future), see ```LICENSE``` for details.
+The library is licensed under MIT license, see ```LICENSE``` for details.
