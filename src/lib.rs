@@ -13,7 +13,7 @@ use syn::__private::{ToTokens, TokenStream2};
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::visit_mut::VisitMut;
-use syn::{visit, visit_mut, Expr, Ident, ItemFn, Pat};
+use syn::{visit, visit_mut, Block, Expr, ExprBlock, Ident, ItemFn, Pat, Stmt};
 
 type Paths<T> = Vec<Vec<T>>;
 
@@ -111,7 +111,16 @@ impl VisitMut for Rewriter {
                             for arm in &mtch.arms {
                                 if let Pat::Ident(ident) = &arm.pat {
                                     if ident.ident == current {
-                                        ret = Some(Expr::clone(arm.body.as_ref()));
+                                        ret = Some(Expr::Block(ExprBlock {
+                                            attrs: mtch.attrs.clone(),
+                                            label: None,
+                                            block: Block {
+                                                brace_token: Default::default(),
+                                                stmts: vec![Stmt::Expr(Expr::clone(
+                                                    arm.body.as_ref(),
+                                                ))],
+                                            },
+                                        }));
                                         break;
                                     }
                                 } else {

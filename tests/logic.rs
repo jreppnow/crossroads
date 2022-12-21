@@ -78,3 +78,20 @@ fn single_path() {
 
     assert_eq!(3, add_a_1_and_a_2());
 }
+
+#[test]
+fn preference() {
+    #[crossroads]
+    fn preference() -> usize {
+        // Note: For some reason, match x { .. } + match y  { .. } as the return line does not parse
+        // in Rust in general, not just with our macro..
+        #[allow(clippy::needless_return)]
+        return match fork!() {
+            does => 1 + 3,
+        } * match fork!() {
+            matter => 2,
+        };
+    }
+
+    assert_eq!(8, preference_does_matter());
+}
