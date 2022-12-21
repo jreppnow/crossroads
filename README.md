@@ -8,42 +8,43 @@ To motivate this, assume you have a couple of test cases like these:
 use std::collections::HashMap;
 
 #[test]
-fn empty() {
-    let mut map = Map::new();
-
-    assert!(map.empty());
-}
-
-#[test]
-fn empty_after_add_remove() {
-    let mut map = HashMap::new();
-
-    map.insert("hello", 1);
-    map.remove("hello");
-
-    assert!(map.empty());
+fn empty_be_default() {
+    let map: HashMap<String, usize> = Default::default();
+    
+    assert!(map.is_empty());
 }
 
 #[test]
 fn empty_after_clear() {
-    let mut map = HashMap::new();
+    let mut map: HashMap<String, usize> = Default::default();
 
-    map.insert("hello", 1);
+    map.insert("test".to_string(), 1);
     map.clear();
 
-    assert!(map.empty());
+    assert!(map.is_empty());
+}
+
+#[test]
+fn empty_after_remove() {
+    let mut map: HashMap<String, usize> = Default::default();
+
+    map.insert("test".to_string(), 1);
+    map.remove("test");
+
+    assert!(map.is_empty());
 }
 ```
 
 This crate allows you to write the following instead:
 
 ```rust
-#[crossroads::crossroads]
+use std::collections::HashMap;
+use crossroads::crossroads;
+
+#[crossroads]
 #[test]
 fn empty() {
-    use std::collections::HashMap;
-
-    let mut map = HashMap::<String, usize>::default();
+    let mut map: HashMap<String, usize> = Default::default();
 
     match fork!() {
         by_default => {}
