@@ -53,3 +53,28 @@ fn recursive() {
     assert_eq!(2, recursively_returns_a_2());
     assert_eq!(3, recursively_returns_a_3());
 }
+
+#[test]
+fn leaves_function_without_forks_intact() {
+    #[crossroads]
+    fn does_not_actually_need_crossroads() {}
+
+    does_not_actually_need_crossroads();
+}
+
+#[test]
+fn single_path() {
+    #[crossroads]
+    fn add() -> usize {
+        // Note: For some reason, match x { .. } + match y  { .. } as the return line does not parse
+        // in Rust in general, not just with our macro..
+        #[allow(clippy::needless_return)]
+        return match fork!() {
+            a_1 => 1,
+        } + match fork!() {
+            and_a_2 => 2,
+        };
+    }
+
+    assert_eq!(3, add_a_1_and_a_2());
+}
